@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Sentiment Analysis</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .sentiment-positive { color: #10b981; }
+        .sentiment-negative { color: #ef4444; }
+        .sentiment-neutral { color: #6b7280; }
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-white mb-2">
+                <i class="fas fa-brain mr-3"></i>Advanced Sentiment Analysis
+            </h1>
+            <p class="text-gray-200">Powered by multiple AI models for accurate sentiment detection</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="max-w-6xl mx-auto">
+            <!-- Input Section -->
+            <div class="card rounded-lg p-6 mb-6">
+                <div class="mb-4">
+                    <div class="flex space-x-4 mb-4">
+                        <button id="singleTextBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-edit mr-2"></i>Single Text
+                        </button>
+                        <button id="batchTextBtn" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                            <i class="fas fa-list mr-2"></i>Batch Analysis
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Single Text Input -->
+                <div id="singleTextSection">
+                    <textarea id="textInput" 
+                              placeholder="Enter your text here for sentiment analysis..." 
+                              class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                              maxlength="5000"></textarea>
+                    <div class="flex justify-between items-center mt-4">
+                        <span id="charCount" class="text-sm text-gray-500">0/5000 characters</span>
+                        <button id="analyzeBtn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-search mr-2"></i>Analyze Sentiment
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Batch Text Input -->
+                <div id="batchTextSection" class="hidden">
+                    <textarea id="batchTextInput" 
+                              placeholder="Enter multiple texts, one per line..." 
+                              class="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                    <div class="flex justify-between items-center mt-4">
+                        <span id="lineCount" class="text-sm text-gray-500">0 lines</span>
+                        <button id="batchAnalyzeBtn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-chart-bar mr-2"></i>Batch Analyze
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="hidden text-center py-8">
+                <div class="inline-block loading text-blue-500 text-4xl">
+                    <i class="fas fa-spinner"></i>
+                </div>
+                <p class="text-white mt-4">Analyzing sentiment...</p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="hidden">
+                <!-- Single Result -->
+                <div id="singleResult" class="card rounded-lg p-6 mb-6">
+                    <h2 class="text-2xl font-bold text-white mb-4">
+                        <i class="fas fa-chart-line mr-2"></i>Analysis Results
+                    </h2>
+                    <div id="singleResultContent"></div>
+                </div>
+
+                <!-- Batch Results -->
+                <div id="batchResults" class="hidden">
+                    <!-- Summary -->
+                    <div class="card rounded-lg p-6 mb-6">
+                        <h2 class="text-2xl font-bold text-white mb-4">
+                            <i class="fas fa-chart-pie mr-2"></i>Summary
+                        </h2>
+                        <div id="summaryContent"></div>
+                    </div>
+
+                    <!-- Visualizations -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div class="card rounded-lg p-6">
+                            <div id="pieChart"></div>
+                        </div>
+                        <div class="card rounded-lg p-6">
+                            <div id="histogram"></div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Results -->
+                    <div class="card rounded-lg p-6">
+                        <h2 class="text-2xl font-bold text-white mb-4">
+                            <i class="fas fa-list-alt mr-2"></i>Detailed Results
+                        </h2>
+                        <div id="batchResultContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Section -->
+            <div id="errorSection" class="hidden card rounded-lg p-6 bg-red-100 border-red-300">
+                <h2 class="text-xl font-bold text-red-800 mb-2">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Error
+                </h2>
+                <p id="errorMessage" class="text-red-700"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const singleTextBtn = document.getElementById('singleTextBtn');
+        const batchTextBtn = document.getElementById('batchTextBtn');
+        const singleTextSection = document.getElementById('singleTextSection');
+        const batchTextSection = document.getElementById('batchTextSection');
+        const textInput = document.getElementById('textInput');
+        const batchTextInput = document.getElementById('batchTextInput');
+        const charCount = document.getElementById('charCount');
+        const lineCount = document.getElementById('lineCount');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const batchAnalyzeBtn = document.getElementById('batchAnalyzeBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsSection = document.getElementById('resultsSection');
+        const singleResult = document.getElementById('singleResult');
+        const batchResults = document.getElementById('batchResults');
+        const errorSection = document.getElementById('errorSection');
+
+        // Mode switching
+        singleTextBtn.addEventListener('click', () => {
+            singleTextBtn.classList.remove('bg-gray-600');
+            singleTextBtn.classList.add('bg-blue-600');
+            batchTextBtn.classList.remove('bg-blue-600');
+            batchTextBtn.classList.add('bg-gray-600');
+            singleTextSection.classList.remove('hidden');
+            batchTextSection.classList.add('hidden');
+            hideResults();
+        });
+
+        batchTextBtn.addEventListener('click', () => {
+            batchTextBtn.classList.remove('bg-gray-600');
+            batchTextBtn.classList.add('bg-blue-600');
+            singleTextBtn.classList.remove('bg-blue-600');
+            singleTextBtn.classList.add('bg-gray-600');
+            batchTextSection.classList.remove('hidden');
+            singleTextSection.classList.add('hidden');
+            hideResults();
+        });
+
+        // Character counter
+        textInput.addEventListener('input', () => {
+            const count = textInput.value.length;
+            charCount.textContent = `${count}/5000 characters`;
+        });
+
+        // Line counter
+        batchTextInput.addEventListener('input', () => {
+            const lines = batchTextInput.value.split('\n').filter(line => line.trim()).length;
+            lineCount.textContent = `${lines} lines`;
+        });
+
+        // Single text analysis
+        analyzeBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            if (!text) {
+                showError('Please enter some text to analyze.');
+                return;
+            }
+
+            showLoading();
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displaySingleResult(result);
+                } else {
+                    showError(result.error || 'Analysis failed');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+            hideLoading();
+        });
+
+        // Batch analysis
+        batchAnalyzeBtn.addEventListener('click', async () => {
+            const texts = batchTextInput.value.split('\n').filter(line => line.trim());
+            if (texts.length === 0) {
+                showError('Please enter some texts to analyze.');
+                return;
+            }
+
+            showLoading();
+            try {
+                const response = await fetch('/batch_analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ texts: texts })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displayBatchResults(result);
+                } else {
+                    showError(result.error || 'Batch analysis failed');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+            hideLoading();
+        });
+
+        // Utility functions
+        function showLoading() {
+            loadingIndicator.classList.remove('hidden');
+            hideResults();
+            hideError();
+        }
+
+        function hideLoading() {
+            loadingIndicator.classList.add('hidden');
+        }
+
+        function showResults() {
+            resultsSection.classList.remove('hidden');
+        }
+
+        function hideResults() {
+            resultsSection.classList.add('hidden');
+            singleResult.classList.add('hidden');
+            batchResults.classList.add('hidden');
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            errorSection.classList.remove('hidden');
+            hideResults();
+        }
+
+        function hideError() {
+            errorSection.classList.add('hidden');
+        }
+
+        function getSentimentClass(sentiment) {
+            return `sentiment-${sentiment}`;
+        }
+
+        function getSentimentIcon(sentiment) {
+            const icons = {
+                positive: 'fas fa-smile',
+                negative: 'fas fa-frown',
+                neutral: 'fas fa-meh'
+            };
+            return icons[sentiment] || 'fas fa-question';
+        }
+
+        function displaySingleResult(result) {
+            const content = document.getElementById('singleResultContent');
+            const confidence = (result.confidence * 100).toFixed(1);
+            
+            content.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-3">Overall Sentiment</h3>
+                        <div class="bg-white rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-2xl ${getSentimentClass(result.final_sentiment)}">
+                                    <i class="${getSentimentIcon(result.final_sentiment)} mr-2"></i>
+                                    ${result.final_sentiment.toUpperCase()}
+                                </span>
+                                <span class="text-lg font-bold text-gray-700">${confidence}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: ${confidence}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-3">Model Breakdown</h3>
+                        <div class="bg-white rounded-lg p-4 space-y-2">
+                            <div class="flex justify-between">
+                                <span>TextBlob:</span>
+                                <span class="${getSentimentClass(result.individual_results.textblob.sentiment)}">
+                                    ${result.individual_results.textblob.sentiment}
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>VADER:</span>
+                                <span class="${getSentimentClass(result.individual_results.vader.sentiment)}">
+                                    ${result.individual_results.vader.sentiment}
+                                </span>
+                            </div>
+                            ${result.individual_results.transformer ? `
+                            <div class="flex justify-between">
+                                <span>Transformer:</span>
+                                <span class="${getSentimentClass(result.individual_results.transformer.sentiment)}">
+                                    ${result.individual_results.transformer.sentiment}
+                                </span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-lg font-semibold text-white mb-3">Text Analysis</h3>
+                    <div class="bg-white rounded-lg p-4">
+                        <p class="text-gray-700 mb-2"><strong>Original:</strong> ${result.original_text}</p>
+                        ${result.preprocessed_text !== result.original_text ? 
+                            `<p class="text-gray-700"><strong>Preprocessed:</strong> ${result.preprocessed_text}</p>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            singleResult.classList.remove('hidden');
+            showResults();
+        }
+
+        async function displayBatchResults(result) {
+            // Display summary
+            const summaryContent = document.getElementById('summaryContent');
+            const summary = result.summary;
+            const avgConfidence = (summary.average_confidence * 100).toFixed(1);
+            
+            summaryContent.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-gray-800">${summary.total_texts}</div>
+                        <div class="text-sm text-gray-600">Total Texts</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold sentiment-positive">${summary.positive_count}</div>
+                        <div class="text-sm text-gray-600">Positive</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold sentiment-negative">${summary.negative_count}</div>
+                        <div class="text-sm text-gray-600">Negative</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold sentiment-neutral">${summary.neutral_count}</div>
+                        <div class="text-sm text-gray-600">Neutral</div>
+                    </div>
+                </div>
+                <div class="mt-4 bg-white rounded-lg p-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-700">Average Confidence:</span>
+                        <span class="text-lg font-bold text-gray-800">${avgConfidence}%</span>
+                    </div>
+                </div>
+            `;
+
+            // Create visualizations
+            try {
+                const vizResponse = await fetch('/visualize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ results: result.results })
+                });
+
+                if (vizResponse.ok) {
+                    const vizData = await vizResponse.json();
+                    Plotly.newPlot('pieChart', JSON.parse(vizData.pie_chart).data, JSON.parse(vizData.pie_chart).layout);
+                    Plotly.newPlot('histogram', JSON.parse(vizData.histogram).data, JSON.parse(vizData.histogram).layout);
+                }
+            } catch (error) {
+                console.error('Visualization error:', error);
+            }
+
+            // Display detailed results
+            const batchContent = document.getElementById('batchResultContent');
+            const resultsHtml = result.results.map((res, index) => `
+                <div class="bg-white rounded-lg p-4 mb-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm text-gray-500">Text ${index + 1}</span>
+                        <span class="text-lg ${getSentimentClass(res.final_sentiment)}">
+                            <i class="${getSentimentIcon(res.final_sentiment)} mr-1"></i>
+                            ${res.final_sentiment}
+                        </span>
+                    </div>
+                    <p class="text-gray-700 text-sm mb-2">${res.original_text}</p>
+                    <div class="flex justify-between text-xs text-gray-500">
+                        <span>Confidence: ${(res.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                </div>
+            `).join('');
+            
+            batchContent.innerHTML = resultsHtml;
+            
+            batchResults.classList.remove('hidden');
+            showResults();
+        }
+
+        // Enter key support
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                analyzeBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>

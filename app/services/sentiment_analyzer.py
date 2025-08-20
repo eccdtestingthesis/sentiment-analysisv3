@@ -1,11 +1,9 @@
 """
-Advanced sentiment analysis service using multiple models
+Advanced sentiment analysis service using multiple transformer models
 """
 import re
 import nltk
 from typing import Dict, Any, Optional, List
-from textblob import TextBlob
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from transformers import pipeline
 import numpy as np
 
@@ -17,20 +15,6 @@ logger = get_app_logger(__name__)
 
 class TextPreprocessor:
     """Text preprocessing utilities"""
-    
-    # Domain-specific keyword mappings for compliance/requirements context
-    POSITIVE_KEYWORDS = {
-        'complete': 2.0, 'completed': 2.0, 'fully': 1.5, 'excellent': 2.0,
-        'all': 1.2, 'followed': 1.5, 'updated': 3.0, 'met': 1.5,
-        'safety': 1.2, 'measures': 1.0, 'documentation': 1.0,
-        'requirements': 0.5, 'standard': 0.5
-    }
-    
-    NEGATIVE_KEYWORDS = {
-        'incomplete': -2.0, 'missing': -2.0, "didn't": -1.8, 'not': -1.5,
-        'failed': -2.0, 'violation': -2.0, 'breach': -2.0, 'lacking': -1.8,
-        'insufficient': -1.8, 'partial': -1.2, 'requirements': 0.0
-    }
     
     @staticmethod
     def clean_text(text: str) -> str:
@@ -52,104 +36,146 @@ class TextPreprocessor:
             return False
         return True
     
-    @classmethod
-    def calculate_domain_score(cls, text: str) -> float:
-        """Calculate domain-specific sentiment score"""
-        text_lower = text.lower()
-        words = text_lower.split()
-        
-        score = 0.0
-        word_count = 0
-        
-        for word in words:
-            if word in cls.POSITIVE_KEYWORDS:
-                score += cls.POSITIVE_KEYWORDS[word]
-                word_count += 1
-            elif word in cls.NEGATIVE_KEYWORDS:
-                score += cls.NEGATIVE_KEYWORDS[word]
-                word_count += 1
-        
-        # Normalize by word count to avoid bias toward longer texts
-        if word_count > 0:
-            score = score / len(words)  # Normalize by total words
-        
-        return score
 
 
-class TextBlobAnalyzer:
-    """TextBlob sentiment analysis"""
+class RobertaAnalyzer:
+    """RoBERTa-based sentiment analysis"""
     
     def __init__(self, config: Config):
-        self.positive_threshold = config.POSITIVE_THRESHOLD
-        self.negative_threshold = config.NEGATIVE_THRESHOLD
+        self.analyzer = None
+        self.config = config
+        self._load_model()
     
-    def analyze(self, text: str) -> Dict[str, Any]:
-        """Analyze sentiment using TextBlob with domain enhancement"""
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        subjectivity = blob.sentiment.subjectivity
+    def _load_model(self):
+        """Load RoBERTa model with fallback"""
+        try:
+            self.analyzer = pipeline(
+                "sentiment-analysis",
+                model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                return_all_scores=True
+            )
+            logger.info("RoBERTa sentiment model loaded successfully")
+        except Exception as e:
+            logger.warning(f"Could not load RoBERTa model: {e}")
+            try:
+                self.analyzer = pipeline(
+                    "sentiment-analysis",
+                    model="nlptown/bert-base-multilingual-uncased-sentiment",
+                    return_all_scores=True
+                )
+                logger.info("Fallback BERT sentiment model loaded")
+            except Exception as e2:
+                logger.error(f"Could not load any RoBERTa/BERT model: {e2}")
+                self.analyzer = None
+    
+    def analyze(self, text: str) -> Optional[Dict[str, Any]]:
+        """Analyze sentiment using RoBERTa"""
+        if not self.analyzer:
+            return None
         
-        # Get domain-specific score
-        domain_score = TextPreprocessor.calculate_domain_score(text)
-        
-        # Combine TextBlob polarity with domain score
-        enhanced_polarity = polarity + (domain_score * 0.7)  # Weight domain score
-        
-        # Convert enhanced polarity to sentiment label with adjusted thresholds
-        if enhanced_polarity > 0.05:  # Lower threshold for positive
-            sentiment = "positive"
-        elif enhanced_polarity < -0.05:  # Lower threshold for negative
-            sentiment = "negative"
-        else:
-            sentiment = "neutral"
-        
-        return {
-            "sentiment": sentiment,
-            "polarity": enhanced_polarity,
-            "original_polarity": polarity,
-            "domain_score": domain_score,
-            "subjectivity": subjectivity,
-            "confidence": abs(enhanced_polarity)
-        }
+        try:
+            results = self.analyzer(text)
+            
+            # Handle different model outputs
+            if isinstance(results[0], list):
+                scores = results[0]
+            else:
+                scores = results
+            
+            # Find the highest scoring sentiment
+            best_result = max(scores, key=lambda x: x['score'])
+            
+            # Normalize label names for RoBERTa Twitter model
+            label = best_result['label'].lower()
+            if 'positive' in label or label == 'label_2':
+                sentiment = "positive"
+            elif 'negative' in label or label == 'label_0':
+                sentiment = "negative"
+            else:
+                sentiment = "neutral"
+            
+            return {
+                "sentiment": sentiment,
+                "confidence": best_result['score'],
+                "all_scores": scores
+            }
+        except Exception as e:
+            logger.error(f"RoBERTa analysis failed: {e}")
+            return None
+    
+    def is_available(self) -> bool:
+        """Check if RoBERTa model is available"""
+        return self.analyzer is not None
 
 
-class VaderAnalyzer:
-    """VADER sentiment analysis"""
+class DistilBertAnalyzer:
+    """DistilBERT-based sentiment analysis"""
     
     def __init__(self, config: Config):
-        self.analyzer = SentimentIntensityAnalyzer()
-        self.positive_threshold = config.VADER_POSITIVE_THRESHOLD
-        self.negative_threshold = config.VADER_NEGATIVE_THRESHOLD
+        self.analyzer = None
+        self.config = config
+        self._load_model()
     
-    def analyze(self, text: str) -> Dict[str, Any]:
-        """Analyze sentiment using VADER with domain enhancement"""
-        scores = self.analyzer.polarity_scores(text)
+    def _load_model(self):
+        """Load DistilBERT model with fallback"""
+        try:
+            self.analyzer = pipeline(
+                "sentiment-analysis",
+                model="distilbert-base-uncased-finetuned-sst-2-english",
+                return_all_scores=True
+            )
+            logger.info("DistilBERT sentiment model loaded successfully")
+        except Exception as e:
+            logger.warning(f"Could not load DistilBERT model: {e}")
+            try:
+                self.analyzer = pipeline(
+                    "sentiment-analysis",
+                    model="j-hartmann/emotion-english-distilroberta-base",
+                    return_all_scores=True
+                )
+                logger.info("Fallback emotion DistilRoBERTa model loaded")
+            except Exception as e2:
+                logger.error(f"Could not load any DistilBERT model: {e2}")
+                self.analyzer = None
+    
+    def analyze(self, text: str) -> Optional[Dict[str, Any]]:
+        """Analyze sentiment using DistilBERT"""
+        if not self.analyzer:
+            return None
         
-        # Get domain-specific score
-        domain_score = TextPreprocessor.calculate_domain_score(text)
-        
-        # Enhance compound score with domain knowledge
-        compound = scores['compound']
-        enhanced_compound = compound + (domain_score * 0.8)  # Higher weight for VADER
-        
-        # Determine sentiment based on enhanced compound score with lower thresholds
-        if enhanced_compound >= 0.03:  # Lower threshold for positive
-            sentiment = "positive"
-        elif enhanced_compound <= -0.03:  # Lower threshold for negative
-            sentiment = "negative"
-        else:
-            sentiment = "neutral"
-        
-        return {
-            "sentiment": sentiment,
-            "compound": enhanced_compound,
-            "original_compound": compound,
-            "domain_score": domain_score,
-            "positive": scores['pos'],
-            "negative": scores['neg'],
-            "neutral": scores['neu'],
-            "confidence": abs(enhanced_compound)
-        }
+        try:
+            results = self.analyzer(text)
+            
+            # Handle different model outputs
+            if isinstance(results[0], list):
+                scores = results[0]
+            else:
+                scores = results
+            
+            # Find the highest scoring sentiment
+            best_result = max(scores, key=lambda x: x['score'])
+            
+            # Normalize label names
+            label = best_result['label'].lower()
+            if 'positive' in label or label == 'label_1':
+                sentiment = "positive"
+            elif 'negative' in label or label == 'label_0':
+                sentiment = "negative"
+            else:
+                sentiment = "neutral"
+            
+            return {
+                "sentiment": sentiment,
+                "confidence": best_result['score'],
+                "all_scores": scores
+            }
+        except Exception as e:
+            logger.error(f"DistilBERT analysis failed: {e}")
+            return None
+    
+    def is_available(self) -> bool:
+        """Check if DistilBERT model is available"""
+        return self.analyzer is not None
 
 
 class TransformerAnalyzer:
@@ -223,13 +249,13 @@ class TransformerAnalyzer:
 
 
 class EnsembleAnalyzer:
-    """Ensemble sentiment analyzer combining multiple models"""
+    """Ensemble sentiment analyzer combining multiple transformer models"""
     
     def __init__(self, config: Config):
         self.config = config
         self.preprocessor = TextPreprocessor()
-        self.textblob_analyzer = TextBlobAnalyzer(config)
-        self.vader_analyzer = VaderAnalyzer(config)
+        self.roberta_analyzer = RobertaAnalyzer(config)
+        self.distilbert_analyzer = DistilBertAnalyzer(config)
         self.transformer_analyzer = TransformerAnalyzer(config)
         
         # Download NLTK data if needed
@@ -250,51 +276,73 @@ class EnsembleAnalyzer:
             nltk.download('stopwords')
     
     def analyze_single(self, text: str) -> Dict[str, Any]:
-        """Analyze sentiment for a single text"""
+        """Analyze sentiment for a single text using transformer ensemble"""
         if not self.preprocessor.validate_text(text, self.config.MAX_TEXT_LENGTH):
             raise ValueError("Invalid text input")
         
         preprocessed_text = self.preprocessor.clean_text(text)
         
-        # Get results from all models
-        textblob_result = self.textblob_analyzer.analyze(preprocessed_text)
-        vader_result = self.vader_analyzer.analyze(preprocessed_text)
+        # Get results from all transformer models
+        roberta_result = self.roberta_analyzer.analyze(preprocessed_text)
+        distilbert_result = self.distilbert_analyzer.analyze(preprocessed_text)
         transformer_result = self.transformer_analyzer.analyze(preprocessed_text)
         
-        # Calculate ensemble sentiment
-        sentiment_scores = {"positive": 0, "negative": 0, "neutral": 0}
-        confidence_sum = 0
-        model_count = 0
-        
-        # TextBlob contribution
-        sentiment_scores[textblob_result["sentiment"]] += textblob_result["confidence"]
-        confidence_sum += textblob_result["confidence"]
-        model_count += 1
-        
-        # VADER contribution
-        sentiment_scores[vader_result["sentiment"]] += vader_result["confidence"]
-        confidence_sum += vader_result["confidence"]
-        model_count += 1
-        
-        # Transformer contribution (if available)
+        # Calculate ensemble sentiment using weighted averaging
+        available_results = []
+        if roberta_result:
+            available_results.append(roberta_result)
+        if distilbert_result:
+            available_results.append(distilbert_result)
         if transformer_result:
-            sentiment_scores[transformer_result["sentiment"]] += transformer_result["confidence"]
-            confidence_sum += transformer_result["confidence"]
-            model_count += 1
+            available_results.append(transformer_result)
         
-        # Determine final sentiment
-        final_sentiment = max(sentiment_scores, key=sentiment_scores.get)
-        avg_confidence = confidence_sum / model_count if model_count > 0 else 0
+        # Ensure at least one model worked
+        if not available_results:
+            raise RuntimeError("No transformer models are available for analysis")
+        
+        # Convert sentiment labels to numerical scores for averaging
+        def sentiment_to_score(sentiment, confidence):
+            """Convert sentiment label to numerical score weighted by confidence"""
+            sentiment_map = {"negative": -1, "neutral": 0, "positive": 1}
+            return sentiment_map[sentiment] * confidence
+        
+        # Calculate weighted average sentiment score
+        total_weighted_score = 0
+        total_confidence = 0
+        
+        for result in available_results:
+            weighted_score = sentiment_to_score(result["sentiment"], result["confidence"])
+            total_weighted_score += weighted_score
+            total_confidence += result["confidence"]
+        
+        # Calculate final averaged sentiment score
+        avg_sentiment_score = total_weighted_score / total_confidence if total_confidence > 0 else 0
+        avg_confidence = total_confidence / len(available_results)
+        
+        # Convert averaged score back to sentiment label
+        if avg_sentiment_score > 0.1:
+            final_sentiment = "positive"
+        elif avg_sentiment_score < -0.1:
+            final_sentiment = "negative"
+        else:
+            final_sentiment = "neutral"
+        
+        # Calculate individual sentiment scores for display
+        sentiment_scores = {"positive": 0, "negative": 0, "neutral": 0}
+        for result in available_results:
+            sentiment_scores[result["sentiment"]] += result["confidence"]
         
         return {
             "original_text": text,
             "preprocessed_text": preprocessed_text,
             "final_sentiment": final_sentiment,
             "confidence": avg_confidence,
+            "averaged_sentiment_score": avg_sentiment_score,
+            "models_used": len(available_results),
             "sentiment_scores": sentiment_scores,
             "individual_results": {
-                "textblob": textblob_result,
-                "vader": vader_result,
+                "roberta": roberta_result,
+                "distilbert": distilbert_result,
                 "transformer": transformer_result
             }
         }
@@ -333,9 +381,9 @@ class EnsembleAnalyzer:
         }
     
     def get_model_status(self) -> Dict[str, bool]:
-        """Get status of all models"""
+        """Get status of all transformer models"""
         return {
-            "textblob": True,
-            "vader": True,
+            "roberta": self.roberta_analyzer.is_available(),
+            "distilbert": self.distilbert_analyzer.is_available(),
             "transformer": self.transformer_analyzer.is_available()
         }

@@ -119,6 +119,95 @@ def health_check():
         }), 500
 
 
+@api_bp.route('/analyze_cdc', methods=['POST'])
+def analyze_cdc():
+    """Analyze sentiment for CDC remarks across different areas"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        # Validate input format
+        required_areas = [
+            'area1_remarks', 'area2_remarks', 'area3_remarks',
+            'area4_remarks', 'area5_remarks', 'area6_remarks',
+            'area7_remarks'
+        ]
+        
+        for area in required_areas:
+            if area not in data:
+                return jsonify({"error": f"Missing {area} in request"}), 400
+            if not isinstance(data[area], list):
+                return jsonify({"error": f"{area} must be a list"}), 400
+
+        # Analyze each area
+        results = {
+            "cdc_id": 1,  # You might want to make this dynamic
+        }
+        
+        total_positive = 0
+        total_negative = 0
+        total_neutral = 0
+        total_confidence = 0
+        total_texts = 0
+
+        for area in required_areas:
+            remarks = data[area]
+            sentiments = []
+            
+            for remark in remarks:
+                if remark.strip():
+                    analysis = analyzer.analyze_single(remark)
+                    sentiments.append(analysis['final_sentiment'].capitalize())
+                    
+                    # Update counters
+                    if analysis['final_sentiment'] == 'positive':
+                        total_positive += 1
+                    elif analysis['final_sentiment'] == 'negative':
+                        total_negative += 1
+                    else:
+                        total_neutral += 1
+                    
+                    total_confidence += analysis['confidence']
+                    total_texts += 1
+
+            # Store results
+            results[area] = remarks
+            results[f"{area[:-8]}_sentimental"] = sentiments  # Convert area1_remarks to area1_sentimental
+
+        # Calculate summary
+        avg_confidence = total_confidence / total_texts if total_texts > 0 else 0
+        
+        # Determine average sentiment
+        if total_positive > total_negative and total_positive > total_neutral:
+            avg_sentiment = "positive"
+        elif total_negative > total_positive and total_negative > total_neutral:
+            avg_sentiment = "negative"
+        else:
+            avg_sentiment = "neutral"
+
+        response = {
+            "results": [results],
+            "summary": {
+                "average_sentiment": avg_sentiment,
+                "average_confidence": avg_confidence,
+                "positive_count": total_positive,
+                "negative_count": total_negative,
+                "neutral_count": total_neutral,
+                "total_texts": total_texts
+            }
+        }
+
+        return jsonify(response)
+
+    except ValueError as e:
+        logger.warning(f"Validation error in analyze_cdc: {e}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"CDC analysis error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 # Error handlers
 @api_bp.errorhandler(404)
 def not_found(error):

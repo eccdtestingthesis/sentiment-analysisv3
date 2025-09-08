@@ -134,6 +134,53 @@ Content-Type: application/json
 GET /health
 ```
 
+### CDC Analysis Endpoint
+
+```bash
+POST /analyze_cdc
+Content-Type: application/json
+
+{
+    "area1_remarks": ["string", "string"],
+    "area2_remarks": ["string", "string"],
+    "area3_remarks": ["string", "string"],
+    "area4_remarks": ["string", "string"],
+    "area5_remarks": ["string", "string"],
+    "area6_remarks": ["string", "string"],
+    "area7_remarks": ["string", "string"]
+}
+```
+
+**Response**:
+```json
+{
+    "results": [{
+        "cdc_id": 1,
+        "area1_remarks": ["string", "string"],
+        "area1_sentimental": ["Positive", "Positive"],
+        "area2_remarks": ["string", "string"],
+        "area2_sentimental": ["Positive", "Positive"],
+        "area3_remarks": ["string", "string"],
+        "area3_sentimental": ["Positive", "Positive"],
+        "area4_remarks": ["string", "string"],
+        "area4_sentimental": ["Positive", "Positive"],
+        "area5_remarks": ["string", "string"],
+        "area5_sentimental": ["Positive", "Positive"],
+        "area6_remarks": ["string", "string"],
+        "area6_sentimental": ["Positive", "Positive"],
+        "area7_remarks": ["string", "string"],
+        "area7_sentimental": ["Positive", "Positive"]
+    }],
+    "summary": {
+        "average_sentiment": "positive",
+        "average_confidence": 0.85,
+        "positive_count": 7,
+        "negative_count": 0,
+        "neutral_count": 0,
+        "total_texts": 7
+    }
+}
+```
 
 ## Technical Details
 
